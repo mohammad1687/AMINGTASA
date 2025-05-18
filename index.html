@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GTA Mobile</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      overflow: hidden;
+      touch-action: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #000;
+    }
+    
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background-color: #222;
+    }
+    
+    #uiContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    #scorePanel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    
+    #joystickContainer {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 120px;
+      height: 120px;
+    }
+    
+    #joystick {
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      position: absolute;
+      top: 30px;
+      left: 30px;
+      transition: transform 0.1s;
+    }
+    
+    #actionButtons {
+      position: absolute;
+      bottom: 30px;
+      right: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    .actionBtn {
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      pointer-events: auto;
+    }
+    
+    #menuButton {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 20px;
+      pointer-events: auto;
+    }
+    
+    #pauseMenu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      pointer-events: auto;
+    }
+    
+    .menuBtn {
+      margin: 10px;
+      padding: 12px 24px;
+      background: #333;
+      border-radius: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="uiContainer">
+    <div id="scorePanel">امتیاز: 0 | زمان: 0</div>
+    
+    <div id="joystickContainer">
+      <div id="joystick"></div>
+    </div>
+    
+    <div id="actionButtons">
+      <div class="actionBtn" id="actionA">A</div>
+      <div class="actionBtn" id="actionB">B</div>
+    </div>
+    
+    <div id="menuButton">≡</div>
+    
+    <div id="pauseMenu">
+      <h1>GTA Mobile</h1>
+      <div class="menuBtn" id="resumeBtn">ادامه بازی</div>
+      <div class="menuBtn" id="restartBtn">شروع مجدد</div>
+      <div class="menuBtn" id="soundBtn">صدا: روشن</div>
+    </div>
+  </div>
+
+  <script>
+    // تنظیمات اولیه بازی
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scorePanel = document.getElementById("scorePanel");
+    
+    // تنظیم اندازه کانواس
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    
+    // حالت بازی
+    const gameState = {
+      score: 0,
+      time: 0,
+      paused: false,
+      soundOn: true,
+player: {
+        x: canvas.width / 2 - 16,
+        y: canvas.height / 2 - 16,
+        width: 32,
+        height: 32,
+        speed: 5,
+        vx: 0,
+        vy: 0
+      },
+      target: {
+        x: Math.random() * (canvas.width - 32),
+        y: Math.random() * (canvas.height - 32),
+        width: 32,
+        height: 32
+      },
+      enemies: [],
+      obstacles: []
+    };
+    
+    // ایجاد موانع
+    for (let i = 0; i < 8; i++) {
+      gameState.obstacles.push({
+        x: Math.random() * (canvas.width - 100),
+        y: Math.random() * (canvas.height - 100),
+        width: 40 + Math.random() * 60,
+        height: 40 + Math.random() * 60
+      });
+    }
+    
+    // ایجاد دشمنان
+    for (let i = 0; i < 3; i++) {
+      gameState.enemies.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        width: 32,
+        height: 32,
+        speed: 1 + Math.random() * 2
+      });
+    }
+    
+    // کنترل جوی استیک
+    const joystick = document.getElementById("joystick");
+    const joystickContainer = document.getElementById("joystickContainer");
+    let joystickActive = false;
+    let joystickStartX = 0;
+    let joystickStartY = 0;
+    let joystickCenterX = 0;
+    let joystickCenterY = 0;
+    
+    joystickContainer.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = joystickContainer.getBoundingClientRect();
+      
+      joystickCenterX = rect.left + rect.width / 2;
+      joystickCenterY = rect.top + rect.height / 2;
+      joystickStartX = touch.clientX;
+      joystickStartY = touch.clientY;
+      
+      joystick.style.transform = 'translate(0, 0)';
+      joystickActive = true;
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (!joystickActive) return;
+      e.preventDefault();
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - joystickStartX;
+      const deltaY = touch.clientY - joystickStartY;
+      
+      // محدود کردن جوی استیک به دایره
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const maxDistance = 30;
+      
+      if (distance > maxDistance) {
+        const angle = Math.atan2(deltaY, deltaX);
+        const limitedX = Math.cos(angle) * maxDistance;
+        const limitedY = Math.sin(angle) * maxDistance;
+        
+        joystick.style.transform = translate(${limitedX}px, ${limitedY}px);
+        updatePlayerMovement(limitedX / maxDistance, limitedY / maxDistance);
+      } else {
+        joystick.style.transform = translate(${deltaX}px, ${deltaY}px);
+        updatePlayerMovement(deltaX / maxDistance, deltaY / maxDistance);
+      }
+    });
+    
+    document.addEventListener('touchend', () => {
+      if (joystickActive) {
+        joystick.style.transform = 'translate(0, 0)';
+        joystickActive = false;
+        updatePlayerMovement(0, 0);
+      }
+    });
+    
+    function updatePlayerMovement(x, y) {
+      gameState.player.vx = x * gameState.player.speed;
+      gameState.player.vy = y * gameState.player.speed;
+    }
+    
+    // دکمه های اکشن
+    document.getElementById("actionA").addEventListener('touchstart', () => {
+      // عملکرد دکمه A (مثلاً شلیک)
+      console.log("Button A pressed");
+    });
+    
+    document.getElementById("actionB").addEventListener('touchstart', () => {
+      // عملکرد دکمه B (مثلاً پرش)
+      console.log("Button B pressed");
+    });
+    
+    // منوی مکث
+    const pauseMenu = document.getElementById("pauseMenu");
+    document.getElementById("menuButton").addEventListener('click', togglePause);
+    document.getElementById("resumeBtn").addEventListener('click', togglePause);
+    document.getElementById("restartBtn").addEventListener('click', restartGame);
+    document.getElementById("soundBtn").addEventListener('click', toggleSound);
+function togglePause() {
+      gameState.paused = !gameState.paused;
+      pauseMenu.style.display = gameState.paused ? "flex" : "none";
+    }
+    
+    function restartGame() {
+      gameState.score = 0;
+      gameState.time = 0;
+      gameState.player.x = canvas.width / 2 - 16;
+      gameState.player.y = canvas.height / 2 - 16;
+      gameState.paused = false;
+      pauseMenu.style.display = "none";
+    }
+    
+    function toggleSound() {
+      gameState.soundOn = !gameState.soundOn;
+      document.getElementById("soundBtn").textContent = 
+        gameState.soundOn ? "صدا: روشن" : "صدا: خاموش";
+    }
+    
+    // تشخیص برخورد
+    function checkCollision(obj1, obj2) {
+      return obj1.x < obj2.x + obj2.width &&
+             obj1.x + obj1.width > obj2.x &&
+             obj1.y < obj2.y + obj2.height &&
+             obj1.y + obj1.height > obj2.y;
+    }
+    
+    // به روز رسانی بازی
+    function update() {
+      if (gameState.paused) return;
+      
+      // به روز رسانی زمان
+      gameState.time += 1/60;
+      
+      // حرکت بازیکن
+      gameState.player.x += gameState.player.vx;
+      gameState.player.y += gameState.player.vy;
+      
+      // محدودیت مرزهای بازی
+      gameState.player.x = Math.max(0, Math.min(canvas.width - gameState.player.width, gameState.player.x));
+      gameState.player.y = Math.max(0, Math.min(canvas.height - gameState.player.height, gameState.player.y));
+      
+      // برخورد با موانع
+      gameState.obstacles.forEach(obs => {
+        if (checkCollision(gameState.player, obs)) {
+          // بازگرداندن به موقعیت قبلی در صورت برخورد
+          gameState.player.x -= gameState.player.vx;
+          gameState.player.y -= gameState.player.vy;
+        }
+      });
+      
+      // حرکت دشمنان
+      gameState.enemies.forEach(enemy => {
+        // حرکت به سمت بازیکن
+        const dx = gameState.player.x - enemy.x;
+        const dy = gameState.player.y - enemy.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > 0) {
+          enemy.x += (dx / distance) * enemy.speed;
+          enemy.y += (dy / distance) * enemy.speed;
+        }
+      });
+      
+      // برخورد با هدف
+      if (checkCollision(gameState.player, gameState.target)) {
+        gameState.score += 100;
+        gameState.target.x = Math.random() * (canvas.width - gameState.target.width);
+        gameState.target.y = Math.random() * (canvas.height - gameState.target.height);
+      }
+      
+      // بروزرسانی پنل امتیاز
+      scorePanel.textContent = امتیاز: ${gameState.score} | زمان: ${gameState.time.toFixed(1)};
+    }
+    
+    // رسم بازی
+    function draw() {
+      // پاک کردن صفحه
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // رسم پس زمینه
+      ctx.fillStyle = "#333";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // رسم موانع
+      ctx.fillStyle = "#a00";
+      gameState.obstacles.forEach(obs => {
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      });
+      
+      // رسم دشمنان
+      ctx.fillStyle = "#d00";
+      gameState.enemies.forEach(enemy => {
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+      });
+      
+      // رسم هدف
+      ctx.fillStyle = "#fd0";
+      ctx.fillRect(gameState.target.x, gameState.target.y, gameState.target.width, gameState.target.height);
+      
+      // رسم بازیکن
+      ctx.fillStyle = "#0f0";
+      ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+    }
+    
+    // حلقه اصلی بازی
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // شروع بازی
+    gameLoop();
+  </script>
+</body>
+</html>
